@@ -1,8 +1,11 @@
-# Simulation script for BBUM benchmarking
+# Simulation script for BBUM benchmarking: generating simulations
+# Peter Y. Wang 2022
+# Bartel Lab, Whitehead Institute/MIT
 
 # Import libraries ---------------
 library(tidyverse)
 # Import bbum, pre package-publishing, on computer cluster... ----
+# library(bbum) # not used
 sapply( paste0(
   "./bbum_R_static/",
   list.files(path = "./bbum_R_static")), source )

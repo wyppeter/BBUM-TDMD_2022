@@ -1,5 +1,5 @@
 # DESeq2 run with BBUM correction and calling for Shi et al. data
-# Peter Y. Wang 2021
+# Peter Y. Wang 2022
 # Bartel Lab, Whitehead Institute/MIT
 
 library(tibble)
@@ -7,7 +7,7 @@ library(dplyr)
 library(tidyr)
 library(forcats)
 library(DESeq2)
-# library(bbum)
+library(bbum)
 
 # Setting data up
 cellsv = c(
@@ -37,8 +37,8 @@ sRNAseq_run = function(cellshere){
     ), stringsAsFactors = F
   ) %>%
     filter(!MIR %in% dme_outliers) %>%
-    mutate(MIR = sub("(hsa|mmu|dme|cel)\\-", "",     MIR),
-           MIR = sub("mir\\-",               "miR-", MIR)
+    mutate(MIR = sub("(hsa|mmu|dme)\\-", "",     MIR),
+           MIR = sub("mir\\-",           "miR-", MIR)
            )
 
   # Read cutoff ----
@@ -93,10 +93,16 @@ sRNAseq_run = function(cellshere){
   df.res = as.data.frame(res) %>%
     rownames_to_column("miRNA")
 
-  # Carry out BUM correction and signif calling
+  # Carry out BBUM correction and signif calling ----
   df.res.corr = df.res %>%
+    # bind_rows(., df.res%>%dplyr::slice(1:5)%>%
+    #             mutate(miRNA = "ARTIFICIALOUTLIER",
+    #                    log2FoldChange = -6,
+    #                    pvalue = 1E-300)
+    # ) %>%
     BBUM_DEcorr_TDMD(miRNA.col = "miRNA",
                      fails.cutoff = cts.notenoughreads,
+                     auto_outliers = T,
                      pBBUM.alpha = 0.05)
 
   # Get WTmean ----

@@ -1,8 +1,14 @@
+# DESeq2 run with BBUM correction and calling for Han et al. data
+# + Plots
+# Peter Y. Wang 2022
+# Bartel Lab, Whitehead Institute/MIT
+
 library(tidyverse)
 library(DESeq2)
 library(gridExtra)
-# library(bbum)
+library(bbum)
 
+# Collate data ----
 expconfig = read.csv("./Han-exp-config.csv")
 
 df = expconfig %>%
@@ -22,7 +28,7 @@ df = expconfig %>%
   pivot_wider(names_from = cond, values_from = counts)
 df[is.na(df)] = 0
 df.all = df %>%
-  mutate(miR = sub("(hsa|mmu|dme|cel)\\-", "", miR)) %>%
+  mutate(miR = sub("(hsa|mmu|dme)\\-", "", miR)) %>%
   rowwise() %>%
   filter(min(N1,N2,N3,Z1,Z2,Z3) > 5)
 
@@ -34,16 +40,22 @@ coldata = data.frame(
          condition = factor(condition, levels = c("untreated","treated"))) %>%
   column_to_rownames(var = "cond")
 
+# DE analysis ----
 df.DE = df.all %>%
   group_by(cells) %>%
   do(., {
 
     DE.in = .
 
+    print("==============================")
+    cellshere = DE.in$cells %>% unique()
+    print(cellshere)
+
     DE.in = DE.in %>%
       select(-cells) %>%
       column_to_rownames("miR")
 
+    # DESeq2 run ----
     dds = DESeqDataSetFromMatrix(countData = DE.in,
                                  colData = coldata,
                                  design = ~ condition)
@@ -64,9 +76,13 @@ df.DE = df.all %>%
     df.res = as.data.frame(res) %>%
       rownames_to_column("miRNA")
 
-    # Carry out BUM correction and signif calling
+    # Carry out BBUM correction and signif calling
     df.res.corr = df.res %>%
-      BBUM_DEcorr_TDMD(miRNA.col = "miRNA", pBBUM.alpha = 0.05)
+      BBUM_DEcorr_TDMD(
+        auto_outliers = T,  # toggle to test without outlier detection.
+        miRNA.col = "miRNA",
+        pBBUM.alpha = 0.05
+        )
 
     # Get WTmean ----
     cts.n = dds %>%
@@ -94,7 +110,7 @@ df.DE = df.all %>%
 
 #-------------------------------------------
 
-# Fig. 3C
+# Fig. 3D
 df.DE %>%
   arrange(tdmd.fct, abs(log2FoldChange)) %>%
   ggplot(aes(x = WTmean, y = log2FoldChange, color = tdmd.fct)) +
@@ -103,7 +119,7 @@ df.DE %>%
   facet_wrap("cells", scales = "free") +
   geom_point(alpha = 0.6, size = 1.5, shape = 16) +
   scale_color_manual(
-    breaks = c("none","star","guide","outlier"),
+    breaks = c("none","passenger","guide","outlier"),
     values = c(
       "gray80",
       "cyan3",
@@ -119,6 +135,9 @@ df.DE %>%
 
 df.DE.hits = df.DE %>%
   filter(tdmd.miR)
+
+bbum::BBUM_plot(df.DE %>% filter(cells == "K562"),
+          option = "pcorr")
 
 # df.DE %>%
 #   write.csv("./Han_DE_results.csv", quote = F, row.names = F)

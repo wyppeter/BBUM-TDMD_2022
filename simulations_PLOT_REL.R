@@ -1,9 +1,12 @@
 # Simulation script for BBUM benchmarking: plotting results
+# Peter Y. Wang 2022
+# Bartel Lab, Whitehead Institute/MIT
 
 # Import libraries ---------------
 library(tidyverse)
 library(ggsci)
 library(EnvStats)
+library(boot)
 
 # Random param ranges ----
 
@@ -22,7 +25,8 @@ MIN.OUTS = 1
 
 ################################### htcomp done
 
-datatype = "-out"
+# datatype = "-out"
+datatype = "+out"
 df.simul.fit = bind_rows(
   read.csv(
     paste0("./sim_data_0_", datatype, "_20211019.csv"),
@@ -106,57 +110,81 @@ eval_plot = df.simul.eval.summ %>%
   pivot_longer(cols = c(sensitivity, specificity, FDR), names_to = "statistic")
 
 
+mean_forboot = function(x, i){
+  mean(x[i], na.rm = T)
+}
+cv_forboot = function(x, i){
+  cv(x[i], na.rm = T)
+}
+
 eval_plot_summstats = eval_plot %>%
-  group_by(repN, callmethod, statistic) %>%
-  summarize_at("value", list(mean_v = mean, var_v = var)) %>%
-  mutate(CV = sqrt(var_v)/mean_v)
-
-eval_stats = eval_plot_summstats %>%
   group_by(callmethod, statistic) %>%
-  mutate(mean.mean = mean(mean_v), mean.se = sqrt(var(mean_v)/length(mean_v)),
-         mean.CI.lo = mean.mean - mean.se*1.96,
-         mean.CI.hi = mean.mean + mean.se*1.96,
-         CV.mean = mean(CV), CV.se = sqrt(var(CV)/length(CV)),
-         CV.CI.lo = CV.mean - CV.se*1.96,
-         CV.CI.hi = CV.mean + CV.se*1.96
-
-  ) %>%
-  ungroup() %>%
-  select(callmethod, statistic, starts_with(c("mean.", "CV."))) %>%
-  distinct() %>%
-  arrange(statistic, callmethod)
+  do(., {
+    dfhere = .
+    bootmean = boot(
+      dfhere$value, statistic = mean_forboot,
+      R = 3000, sim = "ordinary"
+      ) %>%
+      boot.ci(type = "basic")
+    bootcv = boot(
+      dfhere$value, statistic = cv_forboot,
+      R = 3000, sim = "ordinary"
+      ) %>%
+      boot.ci(type = "basic")
+    ci_mean = bootmean$basic[c(4,5)]
+    ci_cv = bootcv$basic[c(4,5)]
+    mean_val = mean(dfhere$value, na.rm = T)
+    cv_val = sqrt(var(dfhere$value, na.rm = T))/mean_val
+    dfhere %>%
+      select(callmethod, statistic) %>%
+      distinct() %>%
+      mutate(v_mu = mean_val,
+             v_mu.lo = ci_mean[1],
+             v_mu.hi = ci_mean[2],
+             v_cv = cv_val,
+             v_cv.lo = ci_cv[1],
+             v_cv.hi = ci_cv[2]
+             )
+  })
 
 eval_zeroes = eval_plot %>%
   filter(value %in% c(0,1)) %>%
-  group_by(repN, callmethod, statistic, value) %>%
+  group_by(callmethod, statistic, value) %>%
   tally() %>%
-  select(repN, callmethod, statistic, value, n) %>%
+  select(callmethod, statistic, value, n) %>%
   distinct() %>%
-  arrange(repN, callmethod, statistic, value)
+  mutate(callmethod = factor(
+    as.character(callmethod),
+    levels = c("SHI.outl","BBUM.naiv","BBUM.auto")
+  )) %>%
+  arrange(callmethod, statistic, value)
 
 ###################
 
-repHere = 2
+# Fig 4A/B
 eval_plot %>%
   mutate(callmethod = factor(
     as.character(callmethod),
-    levels = c("BBUM.auto","BBUM.naiv","SHI.outl")
+    levels = c("SHI.outl","BBUM.naiv","BBUM.auto")
     )) %>%
-  filter(repN == repHere) %>%
   ggplot(aes(
     x = value
   )) +
   facet_grid(callmethod~statistic) +
-  geom_histogram(stat = "bin", fill = "mediumpurple4", binwidth = 0.02, color = NA) +
-  geom_text(data = eval_zeroes %>%
-              filter(repN == repHere),
-            aes(label = n, x = value*0.8+0.1), y = Inf, vjust = 3,
+  geom_histogram(stat = "bin", fill = "mediumpurple4",
+                 # binwidth = 0.02,
+                 binwidth = 0.01,
+                 color = NA) +
+  geom_text(data = eval_zeroes,
+            aes(label = n, x = value*0.8+0.1), y = Inf, vjust = 2,
             color = "mediumpurple4", size = 2
   ) +
-  coord_cartesian(ylim = c(0,100)) +
-  scale_x_continuous(breaks = c(0.05,0.5,0.95)) +
-  labs(title = paste(datatype, "rep", repHere)) +
-  theme_classic()
+  coord_cartesian(ylim = c(0,400)) +
+  scale_x_continuous(breaks = c(0,0.05,0.5,1)) +
+  labs(title = paste(datatype)) +
+  theme_classic(base_size = 12)
 
-View(eval_stats)
-# write.csv(eval_stats,paste0("eval_stats_",datatype,"_normalCV.csv"),row.names = F,quote = F)
+# View(eval_plot_summstats)
+
+# write.csv(eval_plot_summstats,
+#           paste0("eval_stats_",datatype,"_boot.csv"),row.names = F,quote = F)
