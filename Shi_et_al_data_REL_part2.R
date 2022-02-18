@@ -13,19 +13,19 @@ library(ggnewscale)
 library(bbum)
 
 shortlist = c(
-  # "MEF",
-  # "iMN",
-  # "HeLa"
-
   "MEF",
   "iMN",
-  "S2",
-  "K562-KO",
-  "K562-KDa",
-  "K562-KDb",
-  "A549",
-  "HeLa",
-  "MCF7"
+  "HeLa"
+
+  # "MEF",
+  # "iMN",
+  # "S2",
+  # "A549",
+  # "HeLa",
+  # "MCF7",
+  # "K562-KO",
+  # "K562-KDa",
+  # "K562-KDb"
 
 )
 
@@ -35,24 +35,24 @@ cellsv = c(
   "iMN",
   "S2",
 
-  "K562-KO",
-  "K562-KDa",
-  "K562-KDb",
-
   "A549",
   "HeLa",
-  "MCF7"
+  "MCF7",
+
+  "K562-KO",
+  "K562-KDa",
+  "K562-KDb"
 )
 # p_adj thresholds as defined in Shi et al. 2020
 # >> original
 # FDRp_v = c(1E-7, 1E-4,  1E-8,
-#            0.01, 1E-20, 1E-20,
-#            0.05,  0.05, 0.05
+#            0.05,  0.05, 0.05,
+#            0.01, 1E-20, 1E-20
 # )
 # >> current run
 FDRp_v = c(1E-7, 1E-4, 1E-5,
-           0.01, 1E-7, 1E-4,
-           0.05,  0.05, 0.05
+           0.05,  0.05, 0.05,
+           0.01, 1E-7, 1E-4
 )
 names(FDRp_v) = cellsv
 
@@ -72,7 +72,7 @@ collatedata = function(cellshere){
 df = lapply(cellsv, collatedata) %>%
   bind_rows() %>%
 
-  filter(cells %in% shortlist) %>%
+  # filter(cells %in% shortlist) %>%
 
   mutate(FCdir = factor(FCdir))
 
@@ -109,11 +109,11 @@ df.corr = df %>%
           miRNA)
 
 # Log output ----
-# write.csv(df.corr,
-#           file = paste0(
-#             "./dfout_compare.csv"
-#           ),
-#           row.names = F, quote = F)
+write.csv(df.corr,
+          file = paste0(
+            "./dfout_compare.csv"
+          ),
+          row.names = F, quote = F)
 
 
 ####################
@@ -182,6 +182,7 @@ df.corr_plot_bin = df.corr %>%
   mutate(freq = n/sum(n)/binwidth) %>%
   mutate(freq = if_else(BBUM.class, freq, freq * (1-BBUM.th)))
 df.corr_plot_bin %>%
+  filter(cells %in% shortlist) %>%
   ggplot(aes(
     x = pvalue.binned,
     y = freq,
@@ -222,6 +223,7 @@ bbum.model.graph = tibble::tibble(
   mutate(cells = factor(cells, levels = cellsv))
 
 df.corr %>%
+  filter(cells %in% shortlist) %>%
   ggplot(aes(
     x = pvalue,
     color = factor(BBUM.class, levels = c(TRUE,FALSE)))) +
@@ -295,18 +297,39 @@ df.corr %>%
 # Fig 3B
 df.strands = df.corr %>%
   group_by(cells, miRNA.pre) %>%
-  filter(any(tdmd.miR | status == "removed")) %>%
+  filter(any(tdmd.miR)) %>%
   filter(n() > 1) %>%
   mutate(changed = any(status %in% c("added","removed"))) %>%
   group_by(cells) %>%
   filter(any(changed)) %>%
   ungroup() %>%
-  arrange(changed)
-df.strands %>%
-  ggplot(aes(x = factor(
+  arrange(changed) %>%
+  mutate(strandhere = factor(
     if_else(tdmd.miR, "Guide", "Passenger"),
     levels = c("Passenger","Guide")
-  ),
+  )) %>%
+  select(cells, miRNA.pre, miRNA, strandhere, changed, log2FoldChange)
+
+df.strands.pair = full_join(
+  df.strands %>% filter(strandhere == "Guide") %>%
+    select(-strandhere) %>%
+    rename(log2FC.guide = log2FoldChange),
+  df.strands %>% filter(strandhere == "Passenger")%>%
+    select(-strandhere) %>%
+    rename(log2FC.pass = log2FoldChange,
+           miRNA.star = miRNA),
+  by = c(
+    "cells", "miRNA.pre", "changed"
+  )
+) %>%
+  pivot_longer(cols = c(log2FC.guide, log2FC.pass),
+               names_prefix = "log2FC.",
+               names_to = "strandhere",
+               values_to = "log2FoldChange") %>%
+  mutate(strandhere = factor(strandhere, levels = c("pass","guide")))
+
+df.strands.pair %>%
+  ggplot(aes(x = strandhere,
   y = log2FoldChange,
   group = miRNA.pre)) +
   geom_hline(yintercept = 0, color = "black", alpha = 0.15,
@@ -319,26 +342,24 @@ df.strands %>%
       "black"
     )) +
   new_scale_color() +
-  geom_point(aes(color = tdmd.fct),
+  geom_point(aes(color = strandhere),
              alpha = 0.6, size = 1.5, shape = 16) +
   facet_wrap("cells", scales = "free", ncol = 1) +
   scale_color_manual(
-    breaks = c("none","passenger","guide","outlier"),
+    breaks = c("pass","guide"),
     values = c(
-      "gray80",
       "cyan3",
-      "red3",
-      "gray25"
+      "red3"
     )) +
-  geom_point(data = df.strands %>%
+  geom_point(data = df.strands.pair %>%
                filter(changed),
              color = "black", size = 1.5, stroke = 1, shape = 1, alpha = 0.6) +
-  geom_text(data = df.strands %>%
-              filter(changed, tdmd.miR),
+  geom_text(data = df.strands.pair %>%
+              filter(changed, strandhere == "guide"),
             aes(label = miRNA), size = 2,
             nudge_x = 0.2, hjust = 0, vjust = 0.5, color = "black") +
   scale_y_continuous(breaks = seq(-100,100,1)) +
-  coord_cartesian(ylim = c(-0.5, 3), xlim = c(NA, 3)) +
+  coord_cartesian(ylim = c(-0.8, 4), xlim = c(NA, 3)) +
   labs(y = "Fold change (log2)", x = "Strand",
        title = "Strand plot", color = "Gene category") +
   theme_classic(base_size = 12)
@@ -354,11 +375,7 @@ df.pdir = df.corr %>%
   arrange(tdmd.fct) %>%
   mutate(cells = factor(cells, levels = cellsv))
 df.pdir %>%
-  filter(cells %in% c(
-    "MEF",
-    "iMN",
-    "HeLa"
-  )) %>%
+  filter(cells %in% shortlist) %>%
   filter(is.finite(p.dir)) %>%
   ggplot(aes(y = p, x = p.dir,
                                color = tdmd.fct,

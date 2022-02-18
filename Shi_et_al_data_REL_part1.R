@@ -127,11 +127,11 @@ sRNAseq_run = function(cellshere){
               by = "miRNA")
 
   # Log output ----
-  # write.csv(df.out,
-  #           file = paste0(
-  #             "./dfout-", cellshere, ".csv"
-  #           ),
-  #           row.names = F, quote = F)
+  write.csv(df.out,
+            file = paste0(
+              "./dfout-", cellshere, ".csv"
+            ),
+            row.names = F, quote = F)
 
   return(df.out)
 }

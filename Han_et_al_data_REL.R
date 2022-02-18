@@ -139,7 +139,7 @@ df.DE.hits = df.DE %>%
 bbum::BBUM_plot(df.DE %>% filter(cells == "K562"),
           option = "pcorr")
 
-# df.DE %>%
-#   write.csv("./Han_DE_results.csv", quote = F, row.names = F)
+df.DE %>%
+  write.csv("./Han_DE_results.csv", quote = F, row.names = F)
 
 #---------------------------
