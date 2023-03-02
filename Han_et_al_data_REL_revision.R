@@ -9,7 +9,7 @@ library(gridExtra)
 library(bbum)
 
 # Collate data ----
-expconfig = read.csv("./Han-exp-config.csv")
+expconfig = read.csv("./Han-exp-config_TS7.csv")
 
 df = expconfig %>%
   rowwise() %>%
@@ -124,11 +124,11 @@ df.DE %>%
       "gray80",
       "cyan3",
       "red3",
-      "gray25"
+      "magenta2"
     )) +
   scale_x_continuous(trans = "log10", breaks = 10^seq(0,100,2)) +
   scale_y_continuous(breaks = seq(-100,100,2)) +
-  coord_cartesian(xlim = c(1, NA), ylim = c(-6,6)) +
+  coord_cartesian(xlim = c(1, NA), ylim = c(-6,4)) +
   labs(y = "Fold change (log2)", x = "Normalized WT expression",
        title = "MA plot", color = "Gene category") +
   theme_classic(base_size = 12)
@@ -136,8 +136,8 @@ df.DE %>%
 df.DE.hits = df.DE %>%
   filter(tdmd.miR)
 
-bbum::BBUM_plot(df.DE %>% filter(cells == "K562"),
-          option = "pcorr")
+# bbum::BBUM_plot(df.DE %>% filter(cells == "K562"),
+#           option = "pcorr")
 
 df.DE %>%
   write.csv("./Han_DE_results.csv", quote = F, row.names = F)
